@@ -1,0 +1,14 @@
+CREATE DATABASE Universal_Sports_Scoreboard_System; 
+USE Universal_Sports_Scoreboard_System;
+CREATE TABLE Score_Board (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    Sports_Name VARCHAR(100) NOT NULL,
+    Team_A VARCHAR(100) NOT NULL,
+    Team_B VARCHAR(100) NOT NULL,
+    Score_A INT NOT NULL DEFAULT 0,
+    Score_B INT NOT NULL DEFAULT 0,
+    Winner VARCHAR(100) DEFAULT NULL,
+    Is_Ended TINYINT NOT NULL DEFAULT 0,
+    Created_At TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+SELECT * from Score_Board; 
