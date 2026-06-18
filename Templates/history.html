@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <h2 class="mb-3">Match History</h2>
+
+  {% if matches %}
+    <div class="table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Sport</th>
+            <th>Teams</th>
+            <th>Score</th>
+            <th>Winner</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for match in matches %}
+            <tr>
+              <td>{{ match.sport_name }}</td>
+              <td>{{ match.team_a }} vs {{ match.team_b }}</td>
+              <td>{{ match.score_a }} - {{ match.score_b }}</td>
+              <td>
+                {% if match.is_ended %}
+                  {{ match.winner|default:'Draw' }}
+                {% else %}
+                  <span class="badge text-bg-success">Live</span>
+                {% endif %}
+              </td>
+              <td>{{ match.created_at }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="alert alert-secondary">No matches found.</div>
+  {% endif %}
+{% endblock %}
+

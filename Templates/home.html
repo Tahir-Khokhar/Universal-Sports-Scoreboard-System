@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Your Live Matches</h2>
+    <a class="btn btn-primary" href="{% url 'create_match' %}">New Match</a>
+  </div>
+
+  {% if matches %}
+    <div class="row g-3">
+      {% for match in matches %}
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <div class="d-flex flex-column flex-md-row justify-content-between">
+                <div>
+                  <h5 class="card-title mb-1">{{ match.team_a }} vs {{ match.team_b }}</h5>
+                  <div class="text-muted">Sport: {{ match.sport_name }} • Created: {{ match.created_at }}</div>
+                  <div class="mt-2 h4">
+                    <span class="me-3">{{ match.team_a }}: {{ match.score_a }}</span>
+                    <span>{{ match.team_b }}: {{ match.score_b }}</span>
+                  </div>
+                  {% if match.is_ended %}
+                    <div class="mt-2 fw-bold">
+                      Winner: {{ match.winner|default:'Draw' }}
+                    </div>
+                  {% else %}
+                    <span class="badge text-bg-success mt-2">Live</span>
+                  {% endif %}
+                </div>
+
+                <div class="mt-3 mt-md-0 d-flex flex-wrap gap-2 align-items-start">
+                  {% if not match.is_ended %}
+                    <a class="btn btn-outline-primary btn-sm" href="{% url 'update_score' match.id 'A' %}">+ {{ match.team_a }}</a>
+                    <a class="btn btn-outline-primary btn-sm" href="{% url 'update_score' match.id 'B' %}">+ {{ match.team_b }}</a>
+                    <a class="btn btn-danger btn-sm" href="{% url 'end_match' match.id %}">End Match</a>
+                  {% else %}
+                    <span class="badge text-bg-secondary">Ended</span>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-secondary">No matches yet. Create your first match.</div>
+  {% endif %}
+{% endblock %}
+

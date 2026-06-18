@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <h2 class="mb-3">Create Match</h2>
+
+  <form method="post" class="card card-body shadow-sm">
+    {% csrf_token %}
+
+    <div class="mb-3">
+      <label class="form-label">Sport Name</label>
+      <input type="text" class="form-control" name="sport" placeholder="e.g., Cricket" required>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Team A</label>
+      <input type="text" class="form-control" name="team_a" placeholder="Team A name" required>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Team B</label>
+      <input type="text" class="form-control" name="team_b" placeholder="Team B name" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Create</button>
+    <a href="{% url 'home' %}" class="btn btn-outline-secondary">Cancel</a>
+  </form>
+{% endblock %}
+
