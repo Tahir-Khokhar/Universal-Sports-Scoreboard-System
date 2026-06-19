@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block body_class %}cricket-theme{% endblock %}
+{% block title %}Scorecard — {{ match.team_a }} vs {{ match.team_b }}{% endblock %}
+
+{% block content %}
+<div class="cricket-hero">
+  <span class="cricket-badge">{{ cricket_match.get_match_type_display }}</span>
+  <h1 class="mt-2">{{ match.team_a }} vs {{ match.team_b }}</h1>
+  {% if match.is_ended %}
+    <p class="match-ended-banner d-inline-block px-4 py-2 mt-2">Winner: {{ match.winner }}</p>
+  {% else %}
+    <p><span class="live-pulse"></span>Match in progress</p>
+  {% endif %}
+</div>
+
+<div class="d-flex justify-content-end mb-3">
+  <a href="{% url 'cricket_match_detail' match_id=match.id %}" class="btn btn-cricket-primary btn-sm">Live Scoring</a>
+</div>
+
+{% for inn in state.innings %}
+<div class="cricket-card innings-summary-card">
+  <div class="cricket-card-header innings-header">
+    <div>
+      <strong>Innings {{ inn.number }}</strong> — {{ inn.team_name }}
+      {% if not inn.is_completed %}<span class="live-pulse ms-2"></span>{% endif %}
+    </div>
+    <div class="innings-score">{{ inn.total_runs }}/{{ inn.wickets }} <small class="opacity-75">({{ inn.overs }})</small></div>
+  </div>
+  <div class="p-3">
+    {% if inn.target %}
+      <p class="mb-3 opacity-75">Target: {{ inn.target }} • RR: {{ inn.run_rate|default:"—" }} • Req RR: {{ inn.required_rate|default:"—" }}</p>
+    {% elif inn.run_rate %}
+      <p class="mb-3 opacity-75">Run Rate: {{ inn.run_rate }}</p>
+    {% endif %}
+
+    {% if inn.recent_balls %}
+    <div class="recent-balls mb-3">
+      {% for ball in inn.recent_balls %}
+        <div class="ball-chip {% if ball.is_wicket %}wicket{% elif ball.extras != 'none' %}extra{% elif ball.display == '4' or ball.display == '6' %}boundary{% endif %}">
+          {{ ball.display }}
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h6 class="text-warning mb-2">Batting</h6>
+        <div class="table-responsive">
+          <table class="stats-table">
+            <thead><tr><th>Batsman</th><th>R</th><th>B</th><th>4s</th><th>6s</th></tr></thead>
+            <tbody>
+              {% for p in inn.batsmen %}
+              {% if p.balls > 0 or p.is_out %}
+              <tr class="{% if p.is_out %}out{% endif %}">
+                <td>{{ p.name }}{% if p.is_out %} †{% endif %}</td>
+                <td class="highlight">{{ p.runs }}</td>
+                <td>{{ p.balls }}</td>
+                <td>{{ p.fours }}</td>
+                <td>{{ p.sixes }}</td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h6 class="text-warning mb-2">Bowling</h6>
+        <div class="table-responsive">
+          <table class="stats-table">
+            <thead><tr><th>Bowler</th><th>O</th><th>W</th><th>R</th></tr></thead>
+            <tbody>
+              {% for p in inn.bowlers %}
+              {% if p.balls_bowled > 0 %}
+              <tr>
+                <td>{{ p.name }}</td>
+                <td>{{ p.overs }}</td>
+                <td class="highlight">{{ p.wickets }}</td>
+                <td>{{ p.runs_conceded }}</td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% empty %}
+<div class="cricket-card p-4 text-center opacity-75">No innings data yet.</div>
+{% endfor %}
+{% endblock %}
