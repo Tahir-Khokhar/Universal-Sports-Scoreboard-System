@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% block body_class %}cricket-theme{% endblock %}
+{% block title %}Cricket Toss — {{ match.team_a }} vs {{ match.team_b }}{% endblock %}
+
+{% block content %}
+<div class="cricket-hero">
+  <span class="cricket-badge">{{ cricket_match.get_match_type_display }}</span>
+  <h1 class="mt-2">The Toss</h1>
+  <p class="opacity-75">{{ match.team_a }} vs {{ match.team_b }}</p>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="cricket-card p-4">
+      <div id="tossStep1">
+        <div class="toss-coin">🪙</div>
+        <p class="text-center mb-4 opacity-75">Tap a team to flip the coin</p>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <button type="button" class="toss-team-btn" data-team="A">
+              {{ match.team_a }}
+            </button>
+          </div>
+          <div class="col-md-6">
+            <button type="button" class="toss-team-btn" data-team="B">
+              {{ match.team_b }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tossStep2" style="display:none;">
+        <div class="text-center mb-4">
+          <div class="toss-coin" id="tossResultCoin">🏆</div>
+          <h4 id="tossWinnerText"></h4>
+          <p class="opacity-75" id="tossSubText"></p>
+        </div>
+        <p class="text-center mb-3">What does the winner choose?</p>
+        <div class="d-flex justify-content-center gap-3 mb-4">
+          <button type="button" class="decision-btn active" data-decision="bat">Bat First</button>
+          <button type="button" class="decision-btn" data-decision="bowl">Bowl First</button>
+        </div>
+        <div class="text-center">
+          <button type="button" class="btn btn-cricket-primary btn-lg" id="confirmToss">
+            Start Match →
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const matchId = {{ match.id }};
+  const teamAName = "{{ match.team_a|escapejs }}";
+  const teamBName = "{{ match.team_b|escapejs }}";
+  const saveTossUrl = "{% url 'save_cricket_toss' match_id=match.id %}";
+  const matchUrl = "{% url 'cricket_match_detail' match_id=match.id %}";
+  const csrfToken = "{{ csrf_token }}";
+
+  let tossWinner = null;
+  let decision = 'bat';
+
+  document.querySelectorAll('.toss-team-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const chosen = btn.dataset.team;
+      const coin = Math.random() < 0.5 ? 'A' : 'B';
+      tossWinner = coin;
+      const winnerName = coin === 'A' ? teamAName : teamBName;
+
+      document.getElementById('tossStep1').style.display = 'none';
+      document.getElementById('tossStep2').style.display = 'block';
+      document.getElementById('tossWinnerText').textContent = `${winnerName} won the toss!`;
+      document.getElementById('tossSubText').textContent = chosen === coin
+        ? 'Your call was correct!'
+        : `Coin landed on ${coin === 'A' ? teamAName : teamBName}`;
+    });
+  });
+
+  document.querySelectorAll('[data-decision]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-decision]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      decision = btn.dataset.decision;
+    });
+  });
+
+  document.getElementById('confirmToss').addEventListener('click', async () => {
+    const btn = document.getElementById('confirmToss');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+
+    try {
+      const res = await fetch(saveTossUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({ toss_winner: tossWinner, decision }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+        btn.disabled = false;
+        btn.textContent = 'Start Match →';
+        return;
+      }
+      window.location.href = matchUrl;
+    } catch (e) {
+      alert('Failed to save toss: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = 'Start Match →';
+    }
+  });
+</script>
+{% endblock %}
