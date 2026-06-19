@@ -1,51 +1,73 @@
 {% extends 'base.html' %}
+{% block body_class %}cricket-theme{% endblock %}
+{% block title %}Dashboard{% endblock %}
 
 {% block content %}
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2 class="mb-0">Your Live Matches</h2>
-    <a class="btn btn-primary" href="{% url 'create_match' %}">New Match</a>
-  </div>
+<div class="cricket-hero">
+  <h1>Your Matches</h1>
+  <p class="opacity-75">Live scoreboards and match history</p>
+</div>
 
-  {% if matches %}
-    <div class="row g-3">
-      {% for match in matches %}
-        <div class="col-12">
-          <div class="card shadow-sm">
-            <div class="card-body">
-              <div class="d-flex flex-column flex-md-row justify-content-between">
-                <div>
-                  <h5 class="card-title mb-1">{{ match.team_a }} vs {{ match.team_b }}</h5>
-                  <div class="text-muted">Sport: {{ match.sport_name }} • Created: {{ match.created_at }}</div>
-                  <div class="mt-2 h4">
-                    <span class="me-3">{{ match.team_a }}: {{ match.score_a }}</span>
-                    <span>{{ match.team_b }}: {{ match.score_b }}</span>
-                  </div>
-                  {% if match.is_ended %}
-                    <div class="mt-2 fw-bold">
-                      Winner: {{ match.winner|default:'Draw' }}
-                    </div>
-                  {% else %}
-                    <span class="badge text-bg-success mt-2">Live</span>
-                  {% endif %}
-                </div>
+<div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
+  <a class="btn btn-cricket-primary" href="{% url 'create_cricket_match' %}">🏏 New Cricket Match</a>
+  <a class="btn btn-cricket-outline" href="{% url 'create_match' %}">Other Sports</a>
+</div>
 
-                <div class="mt-3 mt-md-0 d-flex flex-wrap gap-2 align-items-start">
-                  {% if not match.is_ended %}
-                    <a class="btn btn-outline-primary btn-sm" href="{% url 'update_score' match.id 'A' %}">+ {{ match.team_a }}</a>
-                    <a class="btn btn-outline-primary btn-sm" href="{% url 'update_score' match.id 'B' %}">+ {{ match.team_b }}</a>
-                    <a class="btn btn-danger btn-sm" href="{% url 'end_match' match.id %}">End Match</a>
-                  {% else %}
-                    <span class="badge text-bg-secondary">Ended</span>
-                  {% endif %}
-                </div>
+{% if matches %}
+  <div class="row g-3">
+    {% for match in matches %}
+      <div class="col-12">
+        <div class="cricket-card dashboard-card p-4 {% if match.sport_name == 'cricket' %}cricket-match{% endif %}">
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-start">
+            <div>
+              <h5 class="mb-1">{{ match.team_a }} <span class="opacity-50">vs</span> {{ match.team_b }}</h5>
+              <div class="opacity-75 small">
+                {{ match.sport_name|title }} • {{ match.created_at|date:"M d, Y H:i" }}
               </div>
+
+              {% if match.sport_name == 'cricket' %}
+                {% if match.is_ended %}
+                  <div class="mt-2 h5 text-warning">Winner: {{ match.winner }}</div>
+                {% else %}
+                  <span class="badge mt-2" style="background:var(--cricket-gold);color:var(--cricket-dark);">
+                    <span class="live-pulse"></span> Live Cricket
+                  </span>
+                {% endif %}
+              {% else %}
+                <div class="mt-2 h4">
+                  <span class="me-3">{{ match.team_a }}: {{ match.score_a }}</span>
+                  <span>{{ match.team_b }}: {{ match.score_b }}</span>
+                </div>
+                {% if match.is_ended %}
+                  <div class="mt-1 fw-bold text-warning">Winner: {{ match.winner|default:'Draw' }}</div>
+                {% endif %}
+              {% endif %}
+            </div>
+
+            <div class="mt-3 mt-md-0 d-flex flex-wrap gap-2">
+              {% if match.sport_name == 'cricket' %}
+                {% if not match.is_ended %}
+                  <a class="btn btn-cricket-primary btn-sm" href="{% url 'cricket_match_detail' match_id=match.id %}">Live Score</a>
+                {% endif %}
+                <a class="btn btn-cricket-outline btn-sm" href="{% url 'cricket_scoreboard' match_id=match.id %}">Scorecard</a>
+              {% elif not match.is_ended %}
+                <a class="btn btn-cricket-outline btn-sm" href="{% url 'update_score' match.id 'A' %}">+ {{ match.team_a }}</a>
+                <a class="btn btn-cricket-outline btn-sm" href="{% url 'update_score' match.id 'B' %}">+ {{ match.team_b }}</a>
+                <a class="btn btn-outline-danger btn-sm" href="{% url 'end_match' match.id %}">End</a>
+              {% else %}
+                <span class="badge bg-secondary">Ended</span>
+              {% endif %}
             </div>
           </div>
         </div>
-      {% endfor %}
-    </div>
-  {% else %}
-    <div class="alert alert-secondary">No matches yet. Create your first match.</div>
-  {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="cricket-card p-5 text-center">
+    <h4>No matches yet</h4>
+    <p class="opacity-75">Create your first cricket match to get started</p>
+    <a class="btn btn-cricket-primary mt-2" href="{% url 'create_cricket_match' %}">Create Cricket Match</a>
+  </div>
+{% endif %}
 {% endblock %}
-
