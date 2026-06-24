@@ -13,10 +13,15 @@ class CricketScorer {
     this.nonStrikerId = null;
     this.bowlerId = null;
 
+    // Break timer state (Lunch/Tea)
+    this.breakTimer = null;
+    this.breakEndsAt = null;
+
     this.bindElements();
     this.bindEvents();
     this.render();
   }
+
 
   bindElements() {
     this.el = {
@@ -32,6 +37,9 @@ class CricketScorer {
       strikerSelect: document.getElementById('strikerSelect'),
       nonStrikerSelect: document.getElementById('nonStrikerSelect'),
       bowlerSelect: document.getElementById('bowlerSelect'),
+      nextBowlerSelect: document.getElementById('nextBowlerSelect'),
+      useNextBowlerBtn: document.getElementById('useNextBowlerBtn'),
+      continueBowlerBtn: document.getElementById('continueBowlerBtn'),
       runButtons: document.getElementById('runButtons'),
       matchEnded: document.getElementById('matchEnded'),
       scoringPanel: document.getElementById('scoringPanel'),
@@ -39,6 +47,7 @@ class CricketScorer {
       fielderSelect: document.getElementById('fielderSelect'),
       fielderGroup: document.getElementById('fielderGroup'),
     };
+
   }
 
   bindEvents() {
@@ -63,7 +72,68 @@ class CricketScorer {
       });
     }
 
+    const swapEndsBtn = document.getElementById('swapEndsBtn');
+    if (swapEndsBtn) {
+      swapEndsBtn.addEventListener('click', () => this.swapEndsUI());
+    }
+
+    const nextBowlerSelect = document.getElementById('nextBowlerSelect');
+    const useNextBowlerBtn = document.getElementById('useNextBowlerBtn');
+    const continueBowlerBtn = document.getElementById('continueBowlerBtn');
+
+    if (useNextBowlerBtn) {
+      useNextBowlerBtn.addEventListener('click', () => {
+        const v = parseInt(nextBowlerSelect?.value);
+        if (!Number.isNaN(v)) {
+          this.bowlerId = v;
+          if (this.el.bowlerSelect) this.el.bowlerSelect.value = v;
+          // Re-render to ensure internal selects/states are consistent.
+          this.updateButtonState();
+          if (nextBowlerSelect) nextBowlerSelect.disabled = true;
+          if (useNextBowlerBtn) useNextBowlerBtn.disabled = true;
+        }
+      });
+    }
+
+    if (continueBowlerBtn) {
+      continueBowlerBtn.addEventListener('click', () => {
+        // Tea break button starts a 10 min timer.
+        this.startBreakTimer('Tea', 10 * 60);
+      });
+    }
+
+    if (useNextBowlerBtn) {
+      // Lunch break button starts a 20 min timer.
+      useNextBowlerBtn.addEventListener('click', () => {
+        this.startBreakTimer('Lunch', 20 * 60);
+      });
+    }
+
+    const dayEndedBtn = document.getElementById('dayEndedBtn');
+    if (dayEndedBtn) {
+      dayEndedBtn.addEventListener('click', () => {
+        const box = document.getElementById('dayResumeBox');
+        if (box) box.style.display = 'block';
+        // Disable scoring controls.
+        if (this.el.runButtons) {
+          this.el.runButtons.querySelectorAll('button').forEach(btn => {
+            btn.disabled = true;
+          });
+        }
+      });
+    }
+
+
+
+    // If the server already sent a bowlerId for the current ball, ensure we sync UI.
+    // (Prevents “new bowler” appearing not to work due to later render overwriting UI.)
+    if (this.el.bowlerSelect && this.bowlerId) {
+      this.el.bowlerSelect.value = this.bowlerId;
+    }
+
+
     document.querySelectorAll('[data-wicket-type]').forEach(btn => {
+
       btn.addEventListener('click', () => {
         document.querySelectorAll('[data-wicket-type]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -89,7 +159,54 @@ class CricketScorer {
     }
   }
 
+  swapEndsUI() {
+    // Swap values between striker/non-striker dropdowns.
+    // This is a manual helper ONLY; server will still re-calc after each ball.
+    const s = this.el.strikerSelect?.value;
+    const ns = this.el.nonStrikerSelect?.value;
+    if (typeof s === 'undefined' || typeof ns === 'undefined') return;
+
+    this.el.strikerSelect.value = ns;
+    this.el.nonStrikerSelect.value = s;
+
+    this.onPlayerChange();
+  }
+
+  startBreakTimer(label, seconds) {
+    // Timer box elements are optional; if not present, we still keep state.
+    const breakLabelEl = document.getElementById('breakLabel');
+    const breakTimerEl = document.getElementById('breakTimer');
+
+    if (this.breakTimer) clearInterval(this.breakTimer);
+
+
+    this.breakTimer = setInterval(() => {
+      if (this.breakEndsAt === null) return;
+      const remainingMs = this.breakEndsAt - Date.now();
+      const remaining = Math.max(0, Math.ceil(remainingMs / 1000));
+      const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
+      const ss = String(remaining % 60).padStart(2, '0');
+      if (breakLabelEl) breakLabelEl.textContent = label;
+      if (breakTimerEl) breakTimerEl.textContent = `${mm}:${ss}`;
+
+      if (remaining <= 0) {
+        clearInterval(this.breakTimer);
+        this.breakTimer = null;
+        if (breakLabelEl) breakLabelEl.textContent = `${label} ended`;
+      }
+    }, 250);
+
+    this.breakEndsAt = Date.now() + seconds * 1000;
+
+    // Immediate UI update
+    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const ss = String(seconds % 60).padStart(2, '0');
+    if (breakLabelEl) breakLabelEl.textContent = label;
+    if (breakTimerEl) breakTimerEl.textContent = `${mm}:${ss}`;
+  }
+
   getCurrentInnings() {
+
     return this.state.current_innings;
   }
 
@@ -143,8 +260,11 @@ class CricketScorer {
 
     this.renderRecentBalls(currentInningsData);
     this.renderPlayerSelects(inn);
+    this.renderStrikerWidget(currentInningsData);
+    this.renderBowlerCompact(currentInningsData);
     this.renderStatsTables(currentInningsData);
     this.updateButtonState();
+
   }
 
   renderRecentBalls(inningsData) {
@@ -186,6 +306,23 @@ class CricketScorer {
     fillSelect(this.el.nonStrikerSelect, inn.batting_players, this.strikerId);
     fillSelect(this.el.bowlerSelect, inn.bowling_players, null);
 
+    // Next bowler list: show everyone from bowling_players (minus current bowler).
+    if (this.el.nextBowlerSelect) {
+      const currentBowler = parseInt(this.el.bowlerSelect?.value) || null;
+      this.el.nextBowlerSelect.innerHTML = '<option value="">Next bowler</option>';
+      (inn.bowling_players || []).forEach(p => {
+        if (currentBowler && p.id === currentBowler) return;
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        // Important: bowling_players coming from server may include {id,name,...}
+        // but if name is missing for some reason, show id fallback.
+        opt.textContent = p.name ? `${p.name}` : `Bowler ${p.id}`;
+        this.el.nextBowlerSelect.appendChild(opt);
+      });
+
+    }
+
+
     if (this.el.fielderSelect) {
       fillSelect(this.el.fielderSelect, inn.bowling_players, null);
     }
@@ -211,8 +348,31 @@ class CricketScorer {
     }
   }
 
+  renderStrikerWidget(inningsData) {
+    if (!inningsData) return;
+    const striker = inningsData.striker;
+    const strikerRunsEl = document.getElementById('strikerRuns');
+    const strikerBallsEl = document.getElementById('strikerBalls');
+    const strikerNameEl = document.getElementById('strikerName');
+    if (strikerRunsEl) strikerRunsEl.textContent = striker?.runs ?? 0;
+    if (strikerBallsEl) strikerBallsEl.textContent = `${striker?.balls ?? 0} balls`;
+    if (strikerNameEl) strikerNameEl.textContent = striker?.name ?? '—';
+  }
+
+  renderBowlerCompact(inningsData) {
+    if (!inningsData) return;
+    const bowler = inningsData.bowler;
+    const el = document.getElementById('bowlerCompact');
+    if (!el) return;
+    const overs = bowler?.overs ?? '0.0';
+    const wickets = bowler?.wickets ?? 0;
+    const maidens = bowler?.maidens ?? 0;
+    el.textContent = `${overs.replace('.', '-')}-${wickets}-${maidens}`;
+  }
+
   renderStatsTables(inningsData) {
     if (!inningsData) return;
+
 
     if (this.el.battingTable) {
       this.el.battingTable.innerHTML = inningsData.batsmen.map(p => `
