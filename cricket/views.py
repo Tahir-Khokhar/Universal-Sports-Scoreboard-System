@@ -1,10 +1,8 @@
 import json
-
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
-
 from scoreboard.models import Match
 from .models import CricketMatch, Player, Innings, Ball
 from . import scoring as cs
@@ -77,7 +75,7 @@ def build_match_state(match, cricket_match, current_innings=None, toss_data=None
 
         batsmen = [
             cs.serialize_player(p)
-            for p in cricket_match.players.filter(team=innings.team_batting).order_by('name')
+            for p in cricket_match.players.filter(team=innings.team_batting).order_by('batting_order', 'name')
         ]
         bowlers = [
             cs.serialize_player(p)
@@ -125,11 +123,16 @@ def build_match_state(match, cricket_match, current_innings=None, toss_data=None
     if current_innings:
         batting_code = current_innings.team_batting
         bowling_code = cs.bowling_team_code(batting_code)
+        
+        # Determine striker and non-striker
+        striker, non_striker = cs.get_current_batsmen(current_innings, cricket_match)
+        
         current_data = {
             'id': current_innings.id,
             'number': current_innings.innings_number,
             'batting_team_code': batting_code,
             'batting_team_name': cs.batting_team_name(match, batting_code),
+
             'bowling_team_code': bowling_code,
             'bowling_team_name': cs.batting_team_name(match, bowling_code),
             'total_runs': current_innings.total_runs,
@@ -137,20 +140,39 @@ def build_match_state(match, cricket_match, current_innings=None, toss_data=None
             'overs': cs.format_overs(current_innings.balls_bowled),
             'max_overs': cricket_match.overs,
             'target': current_innings.target_runs,
+            'striker_id': striker.id if striker else None,
+            'non_striker_id': non_striker.id if non_striker else None,
             'batting_players': [
                 cs.serialize_player(p)
                 for p in cricket_match.players.filter(team=batting_code, is_out=False).order_by('batting_order', 'name')
             ],
-
             'bowling_players': [
                 cs.serialize_player(p)
-                for p in cricket_match.players.filter(team=bowling_code).order_by('name')
+                for p in (
+                    cricket_match.players.filter(team=bowling_code, bowling_role__in=['bowler', 'allrounder']).order_by('batting_order', 'name')
+                    if cricket_match.players.filter(team=bowling_code, bowling_role__in=['bowler', 'allrounder']).exists()
+                    else cricket_match.players.filter(team=bowling_code).order_by('batting_order', 'name')
+                )
             ],
             'all_batting_players': [
                 cs.serialize_player(p)
                 for p in cricket_match.players.filter(team=batting_code).order_by('batting_order', 'name')
             ],
-
+            'bowler': (cs.serialize_player(cricket_match.players.filter(team=bowling_code, bowling_role__in=['bowler', 'allrounder']).order_by('batting_order', 'name').first()) if cricket_match.players.filter(team=bowling_code, bowling_role__in=['bowler', 'allrounder']).exists() else (cs.serialize_player(cricket_match.players.filter(team=bowling_code).order_by('batting_order', 'name').first()) if cricket_match.players.filter(team=bowling_code).exists() else None)),
+            'batting_categories': {
+                'top': [
+                    cs.serialize_player(p)
+                    for p in cricket_match.players.filter(team=batting_code, is_out=False, batting_category='top').order_by('batting_order', 'name')
+                ],
+                'middle': [
+                    cs.serialize_player(p)
+                    for p in cricket_match.players.filter(team=batting_code, is_out=False, batting_category='middle').order_by('batting_order', 'name')
+                ],
+                'lower': [
+                    cs.serialize_player(p)
+                    for p in cricket_match.players.filter(team=batting_code, is_out=False, batting_category='lower').order_by('batting_order', 'name')
+                ],
+            },
         }
 
     return {
@@ -180,7 +202,12 @@ def create_cricket_match(request):
             sport_name="cricket",
             team_a=team_a_name,
             team_b=team_b_name,
+            # Save venue fields entered on the cricket creation page
+            venue_stadium_name=request.POST.get('venue_stadium_name') or '',
+            venue_city=request.POST.get('venue_city') or '',
+
         )
+
 
         cricket_match = CricketMatch.objects.create(
             match=match,
@@ -368,35 +395,44 @@ def add_ball_score(request, match_id):
 
         innings.save()
 
+        # Determine strike rotation candidates.
+        # `batsman` (payload batsman_id) is the current striker at the start of this ball.
         new_striker = batsman
         new_non_striker = non_striker
-        if cs.should_rotate_strike(runs_scored, legal_ball, innings.balls_bowled):
-            new_striker, new_non_striker = cs.swap_striker(batsman, non_striker)
 
-        # On wicket, bring next batter automatically based on batting order.
+        rotated = cs.should_rotate_strike(runs_scored, legal_ball, innings.balls_bowled)
+        if rotated:
+            # Swap ends based on the *current* state: at the start of the ball,
+            # `batsman` is striker and `non_striker` is non-striker.
+            new_striker, new_non_striker = non_striker, batsman
+
+
+        # On wicket, replace the out batter based on who was dismissed:
+        # - If the striker was dismissed -> replace striker.
+        # - If the non-striker was dismissed (run out where non-striker is out) -> replace non-striker.
         if is_wicket:
-            # If the striker got out, replace striker; otherwise replace non-striker.
-            out_batter = batsman if faces_ball else None
-            if out_batter is None:
-                # fallback: if batsman.is_out set, assume striker
-                out_batter = batsman
-
             batting_team = innings.team_batting
 
             def pick_next_batter(exclude_ids):
-                # next batter = lowest batting_order among not-out players, excluding current ones
                 qs = cricket_match.players.filter(team=batting_team, is_out=False).exclude(id__in=exclude_ids)
                 return qs.order_by('batting_order', 'id').first()
 
-            if batsman.id == (new_striker.id if new_striker else None):
-                # striker was out; striker becomes next
-                next_batter = pick_next_batter(exclude_ids=[batsman.id, non_striker.id])
-                new_striker = next_batter
-            else:
-                # non-striker was out (e.g., run out); replace non-striker
-                next_batter = pick_next_batter(exclude_ids=[batsman.id, non_striker.id])
-                new_non_striker = next_batter
+            # Model marks the dismissed batter as `batsman` always (we set batsman.is_out=True above).
+            # So we treat `batsman` parameter as the out batter.
+            dismissed_batter = batsman
 
+            exclude_ids = [batsman.id, non_striker.id]
+            next_batter = pick_next_batter(exclude_ids=exclude_ids)
+
+            # Replace whichever end currently has the dismissed batter.
+            if new_striker and new_striker.id == dismissed_batter.id:
+                new_striker = next_batter
+            elif new_non_striker and new_non_striker.id == dismissed_batter.id:
+                new_non_striker = next_batter
+            else:
+                # Fallback: if strike rotation already happened, but dismissed batter not on either end,
+                # assume striker was out.
+                new_striker = next_batter
 
         if cs.all_out(innings, cricket_match) or cs.innings_limit_reached(innings, cricket_match):
             status, _ = complete_innings(innings, cricket_match)
@@ -422,8 +458,8 @@ def add_ball_score(request, match_id):
 @login_required
 def cricket_scoreboard(request, match_id):
     match, cricket_match = _get_cricket_match(request, match_id)
-    state = build_match_state(match, cricket_match, toss_data=toss_data)
     toss_data = request.session.get(f"cricket_toss_{match_id}", {})
+    state = build_match_state(match, cricket_match, toss_data=toss_data)
 
     return render(request, 'cricket_scoreboard.html', {
         'match': match,
