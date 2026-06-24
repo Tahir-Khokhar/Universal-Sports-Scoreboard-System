@@ -1,5 +1,4 @@
 from django.db import models
-
 from scoreboard.models import Match
 
 
@@ -12,8 +11,8 @@ class CricketMatch(models.Model):
 
     match = models.OneToOneField(
         Match,
-        on_delete=models.CASCADE,
-        related_name='cricket_match'
+        on_delete=models.CASCADE,      # Delete matches if user is deleted
+        related_name='cricket_match'   # Access: user.matches.all()
     )
     match_type = models.CharField(max_length=10, choices=MATCH_TYPES)
     overs = models.IntegerField(null=True, blank=True)  # For limited overs
@@ -36,19 +35,19 @@ class Player(models.Model):
     # Batting order / categories (used for Test match and for auto replacing striker after wicket)
     batting_order = models.IntegerField(default=0)  # 1..11 (smaller = earlier)
     BAT_CATEGORIES = [
-        ('top', 'Top Order'),
-        ('middle', 'Middle Order'),
-        ('lower', 'Lower Order'),
+        ('TOP', 'Top Order'),      # Changed to uppercase to match requested format
+        ('MIDDLE', 'Middle Order'),
+        ('LOWER', 'Lower Order'),
     ]
-    batting_category = models.CharField(max_length=10, choices=BAT_CATEGORIES, default='middle')
+    batting_category = models.CharField(max_length=20, choices=BAT_CATEGORIES, default='MIDDLE')
 
     # Role used for bowling lists (bowlers + all-rounders)
-    BOWL_ROLES = [
-        ('bowler', 'Bowler'),
-        ('allrounder', 'All-rounder'),
+    PLAYER_ROLES = [
+        ('BATSMAN', 'Batsman'),
+        ('BOWLER', 'Bowler'),
+        ('ALL_ROUNDER', 'All-rounder'),
     ]
-    bowling_role = models.CharField(max_length=15, choices=BOWL_ROLES, default='bowler')
-
+    player_role = models.CharField(max_length=20, choices=PLAYER_ROLES, default='BATSMAN')
 
     # Batting stats
     runs_scored = models.IntegerField(default=0)
@@ -137,4 +136,3 @@ class Ball(models.Model):
 
     def __str__(self):
         return f"Ball {self.ball_number}: {self.batsman.name} - {self.runs} runs"
-
