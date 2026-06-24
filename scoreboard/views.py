@@ -103,7 +103,12 @@ def create_cricket_match(request):
             sport_name="cricket",
             team_a=team_a_name,
             team_b=team_b_name,
+            # Save venue fields entered on the generic match creation page
+            venue_stadium_name=request.POST.get('venue_stadium_name') or '',
+            venue_city=request.POST.get('venue_city') or '',
+
         )
+
         
         # Create cricket match details
         cricket_match = CricketMatch.objects.create(
